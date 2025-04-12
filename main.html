@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тренажер для настольного тенниса</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        
+        .timer {
+            font-size: 3rem;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        
+        .buttons {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            padding: 12px 20px;
+            font-size: 1rem;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            margin-top: 20px;
+            font-size: 1.2rem;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Тренажер для настольного тенниса</h1>
+        <div class="timer" id="timer">00:00</div>
+        <div class="buttons">
+            <button id="btn30">30 секунд</button>
+            <button id="btn60">60 секунд</button>
+            <button id="btn90">90 секунд</button>
+            <button id="btn120">120 секунд</button>
+            <button id="btn150">150 секунд</button>
+        </div>
+        <div class="status" id="status">Нажмите кнопку для начала тренировки</div>
+    </div>
+
+    <script>
+        // Элементы DOM
+        const timerElement = document.getElementById('timer');
+        const statusElement = document.getElementById('status');
+        const buttons = {
+            btn30: document.getElementById('btn30'),
+            btn60: document.getElementById('btn60'),
+            btn90: document.getElementById('btn90'),
+            btn120: document.getElementById('btn120'),
+            btn150: document.getElementById('btn150')
+        };
+        
+        // Аудио контекст
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let timerInterval;
+        let remainingTime = 0;
+        let isRunning = false;
+        
+        // Функция для генерации гауссовского распределения
+        function gaussianRandom(mean, stdDev) {
+            let u = 0, v = 0;
+            while(u === 0) u = Math.random();
+            while(v === 0) v = Math.random();
+            const num = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+            return num * stdDev + mean;
+        }
+        
+        // Функция для генерации времени следующего хлопка (5-15 секунд)
+        function getNextClapTime() {
+            let time;
+            do {
+                // Среднее значение 10 секунд, стандартное отклонение 3 секунды
+                time = gaussianRandom(10, 3);
+            } while (time < 5 || time > 15); // Ограничиваем диапазон 5-15 секунд
+            return time * 1000; // Переводим в миллисекунды
+        }
+        
+        // Функция для воспроизведения хлопка (1 или 2 хлопка)
+        function playClap() {
+            const isDoubleClap = Math.random() > 0.5; // 50% вероятность
+            
+            // Создаем звук хлопка (более громкий)
+            function createClap() {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.type = 'square';
+                oscillator.frequency.value = 200; // Более высокий тон
+                gainNode.gain.value = 1.0; // Максимальная громкость
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                // Быстрое затухание звука
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.15);
+                
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + 0.15);
+            }
+            
+            createClap();
+            
+            if (isDoubleClap) {
+                setTimeout(() => {
+                    createClap();
+                    statusElement.textContent = "Двойной хлопок!";
+                }, 250); // Второй хлопок через 250 мс
+            } else {
+                statusElement.textContent = "Одиночный хлопок!";
+            }
+        }
+        
+        // Функция для запуска тренажера
+        function startTraining(duration) {
+            if (isRunning) return;
+            
+            isRunning = true;
+            remainingTime = duration;
+            
+            // Отключаем все кнопки во время работы
+            Object.values(buttons).forEach(btn => btn.disabled = true);
+            
+            // Обновляем таймер
+            updateTimer();
+            timerInterval = setInterval(updateTimer, 1000);
+            
+            // Запускаем первый хлопок через случайное время (1-3 секунды)
+            const firstClapDelay = Math.random() * 2000 + 1000;
+            setTimeout(() => {
+                playClap();
+                scheduleNextClap();
+            }, firstClapDelay);
+            
+            // Устанавливаем таймер завершения
+            setTimeout(endTraining, duration * 1000);
+        }
+        
+        // Функция для планирования следующего хлопка
+        function scheduleNextClap() {
+            if (!isRunning) return;
+            
+            const nextClapTime = getNextClapTime();
+            setTimeout(() => {
+                if (isRunning) {
+                    playClap();
+                    scheduleNextClap();
+                }
+            }, nextClapTime);
+        }
+        
+        // Функция для обновления таймера
+        function updateTimer() {
+            remainingTime--;
+            
+            const minutes = Math.floor(remainingTime / 60);
+            const seconds = remainingTime % 60;
+            timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            
+            if (remainingTime <= 0) {
+                clearInterval(timerInterval);
+            }
+        }
+        
+        // Функция завершения тренировки
+        function endTraining() {
+            isRunning = false;
+            clearInterval(timerInterval);
+            statusElement.textContent = "Тренировка завершена!";
+            
+            // Включаем кнопки
+            Object.values(buttons).forEach(btn => btn.disabled = false);
+        }
+        
+        // Назначаем обработчики кнопок
+        buttons.btn30.addEventListener('click', () => startTraining(30));
+        buttons.btn60.addEventListener('click', () => startTraining(60));
+        buttons.btn90.addEventListener('click', () => startTraining(90));
+        buttons.btn120.addEventListener('click', () => startTraining(120));
+        buttons.btn150.addEventListener('click', () => startTraining(150));
+    </script>
+</body>
+</html>
