@@ -96,15 +96,7 @@
         let timerInterval;
         let remainingTime = 0;
         let isRunning = false;
-        
-        // Функция для генерации гауссовского распределения
-        function gaussianRandom(mean, stdDev) {
-            let u = 0, v = 0;
-            while(u === 0) u = Math.random();
-            while(v === 0) v = Math.random();
-            const num = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
-            return num * stdDev + mean;
-        }
+        let nextClapTimeout;
         
         // Нормальное распределение (3-8 сек, среднее 5, отклонение 2)
         function getNextClapTime() {
@@ -115,103 +107,97 @@
             return Math.round(time * 1000);
         }
         
-        // Функция для воспроизведения хлопка (1 или 2 хлопка)
+        function gaussianRandom(mean, stdev) {
+            const u = 1 - Math.random();
+            const v = Math.random();
+            const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+            return z * stdev + mean;
+        }
+        
+        // Громкий хлопок из новой версии
         function playClap() {
-            const isDoubleClap = Math.random() > 0.5; // 50% вероятность
+            const isDouble = Math.random() > 0.5; // 50% вероятность
             
-            // Создаем звук хлопка (более громкий)
             function createClap() {
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
+                const osc = audioContext.createOscillator();
+                const gain = audioContext.createGain();
+                osc.type = 'square';
+                osc.frequency.value = 280; // Яркий четкий звук
+                gain.gain.value = 1.3; // Увеличенная громкость
                 
-                oscillator.type = 'square';
-                oscillator.frequency.value = 200; // Более высокий тон
-                gainNode.gain.value = 1.0; // Максимальная громкость
+                osc.connect(gain);
+                gain.connect(audioContext.destination);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.12);
                 
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-                
-                // Быстрое затухание звука
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.15);
-                
-                oscillator.start();
-                oscillator.stop(audioContext.currentTime + 0.15);
+                osc.start();
+                osc.stop(audioContext.currentTime + 0.12);
             }
             
             createClap();
-            
-            if (isDoubleClap) {
+            if (isDouble) {
                 setTimeout(() => {
                     createClap();
                     statusElement.textContent = "Двойной хлопок!";
-                }, 250); // Второй хлопок через 250 мс
+                }, 220); // Интервал между хлопками 220 мс
             } else {
                 statusElement.textContent = "Одиночный хлопок!";
             }
         }
         
-        // Функция для запуска тренажера
         function startTraining(duration) {
             if (isRunning) return;
             
             isRunning = true;
             remainingTime = duration;
+            statusElement.textContent = "Старт!";
             
-            // Отключаем все кнопки во время работы
+            // Блокируем кнопки
             Object.values(buttons).forEach(btn => btn.disabled = true);
             
-            // Обновляем таймер
+            // Таймер
             updateTimer();
             timerInterval = setInterval(updateTimer, 1000);
             
-            // Запускаем первый хлопок через случайное время (1-3 секунды)
-            const firstClapDelay = Math.random() * 2000 + 1000;
+            // Первый хлопок через 1-3 сек
             setTimeout(() => {
                 playClap();
                 scheduleNextClap();
-            }, firstClapDelay);
+            }, Math.random() * 2000 + 1000);
             
-            // Устанавливаем таймер завершения
+            // Автоматическое завершение
             setTimeout(endTraining, duration * 1000);
         }
         
-        // Функция для планирования следующего хлопка
         function scheduleNextClap() {
             if (!isRunning) return;
-            
-            const nextClapTime = getNextClapTime();
-            setTimeout(() => {
-                if (isRunning) {
-                    playClap();
-                    scheduleNextClap();
-                }
-            }, nextClapTime);
+            nextClapTimeout = setTimeout(() => {
+                playClap();
+                scheduleNextClap();
+            }, getNextClapTime());
         }
         
-        // Функция для обновления таймера
         function updateTimer() {
             remainingTime--;
-            
-            const minutes = Math.floor(remainingTime / 60);
-            const seconds = remainingTime % 60;
-            timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            const mins = Math.floor(remainingTime / 60);
+            const secs = remainingTime % 60;
+            timerElement.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
             
             if (remainingTime <= 0) {
                 clearInterval(timerInterval);
             }
         }
         
-        // Функция завершения тренировки
         function endTraining() {
             isRunning = false;
             clearInterval(timerInterval);
+            clearTimeout(nextClapTimeout);
             statusElement.textContent = "Тренировка завершена!";
             
-            // Включаем кнопки
+            // Разблокируем кнопки
             Object.values(buttons).forEach(btn => btn.disabled = false);
         }
         
-        // Назначаем обработчики кнопок
+        // Назначение обработчиков
         buttons.btn30.addEventListener('click', () => startTraining(30));
         buttons.btn60.addEventListener('click', () => startTraining(60));
         buttons.btn90.addEventListener('click', () => startTraining(90));
